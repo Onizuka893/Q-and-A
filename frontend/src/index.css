@@ -1,0 +1,10 @@
+body {
+  margin: 0;
+  background-color: #f7f8fa;
+}
+
+.container {
+  font-family: 'Segoe UI', 'Helvetica Neue', sans-serif;
+  font-size: 16px;
+  color: #5c5a5a;
+}
