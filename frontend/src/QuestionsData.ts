@@ -1,3 +1,6 @@
+import { http } from './http';
+import { getAccessToken } from './Auth';
+
 export interface QuestionData {
   questionId: number;
   title: string;
@@ -5,6 +8,20 @@ export interface QuestionData {
   userName: string;
   created: Date;
   answers: AnswerData[];
+}
+
+export interface QuestionDataFromServer {
+  questionId: number;
+  title: string;
+  content: string;
+  userName: string;
+  created: string;
+  answers: Array<{
+    answerId: number;
+    content: string;
+    userName: string;
+    created: string;
+  }>;
 }
 
 export interface AnswerData {
@@ -24,9 +41,14 @@ export interface PostQuestionData {
 export const getQuestion = async (
   questionId: number,
 ): Promise<QuestionData | null> => {
-  await wait(500);
-  const results = questions.filter((q) => q.questionId === questionId);
-  return results.length === 0 ? null : results[0];
+  const result = await http<QuestionDataFromServer>({
+    path: `questions/${questionId}`,
+  });
+  if (result.ok && result.body) {
+    return mapQuestionFromServer(result.body);
+  } else {
+    return null;
+  }
 };
 
 const questions: QuestionData[] = [
@@ -64,9 +86,28 @@ const questions: QuestionData[] = [
   },
 ];
 
+export const mapQuestionFromServer = (
+  question: QuestionDataFromServer,
+): QuestionData => ({
+  ...question,
+  created: new Date(question.created),
+  answers: question.answers
+    ? question.answers.map((answer) => ({
+        ...answer,
+        created: new Date(answer.created),
+      }))
+    : [],
+});
+
 export const getUnansweredQuestions = async (): Promise<QuestionData[]> => {
-  await wait(500);
-  return questions.filter((q) => q.answers.length === 0);
+  const result = await http<QuestionDataFromServer[]>({
+    path: 'questions/unanswered',
+  });
+  if (result.ok && result.body) {
+    return result.body.map(mapQuestionFromServer);
+  } else {
+    return [];
+  }
 };
 
 const wait = async (ms: number): Promise<void> => {
@@ -76,26 +117,31 @@ const wait = async (ms: number): Promise<void> => {
 export const searchQuestions = async (
   criteria: string,
 ): Promise<QuestionData[]> => {
-  await wait(500);
-  return questions.filter(
-    (q) =>
-      q.title.toLowerCase().indexOf(criteria.toLowerCase()) >= 0 ||
-      q.content.toLowerCase().indexOf(criteria.toLowerCase()) >= 0,
-  );
+  const result = await http<QuestionDataFromServer[]>({
+    path: `questions?search=${criteria}`,
+  });
+  if (result.ok && result.body) {
+    return result.body.map(mapQuestionFromServer);
+  } else {
+    return [];
+  }
 };
 
 export const postQuestion = async (
   question: PostQuestionData,
 ): Promise<QuestionData | undefined> => {
-  await wait(500);
-  const questionId = Math.max(...questions.map((q) => q.questionId)) + 1;
-  const newQuestion: QuestionData = {
-    ...question,
-    questionId,
-    answers: [],
-  };
-  questions.push(newQuestion);
-  return newQuestion;
+  const accessToken = await getAccessToken();
+  const result = await http<QuestionDataFromServer, PostQuestionData>({
+    path: 'questions',
+    method: 'post',
+    body: question,
+    accessToken,
+  });
+  if (result.ok && result.body) {
+    return mapQuestionFromServer(result.body);
+  } else {
+    return undefined;
+  }
 };
 
 export interface PostAnswerData {
@@ -107,14 +153,16 @@ export interface PostAnswerData {
 export const postAnswer = async (
   answer: PostAnswerData,
 ): Promise<AnswerData | undefined> => {
-  await wait(500);
-  const question = questions.filter(
-    (q) => q.questionId === answer.questionId,
-  )[0];
-  const answerInQuestion: AnswerData = {
-    answerId: 99,
-    ...answer,
-  };
-  question.answers.push(answerInQuestion);
-  return answerInQuestion;
+  const accessToken = await getAccessToken();
+  const result = await http<AnswerData, PostAnswerData>({
+    path: 'questions/answer',
+    method: 'post',
+    body: answer,
+    accessToken,
+  });
+  if (result.ok) {
+    return result.body;
+  } else {
+    return undefined;
+  }
 };
